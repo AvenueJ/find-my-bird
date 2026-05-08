@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.json
+*.tar.gz
+data/
+.DS_Store
