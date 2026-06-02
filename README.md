@@ -1,6 +1,6 @@
 # Bird Nerd
 
-Search bird observations by image similarity, location, and month using the [iNaturalist 2021 mini dataset](https://github.com/visipedia/inat_comp/tree/master/2021), [JINA-CLIP-V2](https://jina.ai/clip/) embeddings via Elastic Inference Service, and Elasticsearch.
+Search bird observations by image similarity, location, and month using the [iNaturalist 2021 mini dataset](https://github.com/visipedia/inat_comp/tree/master/2021), [Jina Embeddings V5 Omni Small](https://jina.ai/embeddings/) embeddings via Elastic Inference Service, and Elasticsearch.
 
 ## Features
 
@@ -10,7 +10,7 @@ Search bird observations by image similarity, location, and month using the [iNa
 ## Prerequisites
 
 - Python 3.11+
-- [Elastic Cloud](https://cloud.elastic.co) deployment (8.x) — the `.jina-clip-v2` model is hosted by Elastic, no external Jina API key needed
+- [Elastic Cloud](https://cloud.elastic.co) deployment (8.x) — the `.jina-embeddings-v5-omni-small` model is hosted by Elastic, no external Jina API key needed
 - [AWS CLI](https://aws.amazon.com/cli/) (for downloading the dataset)
 
 ## Setup
@@ -68,14 +68,14 @@ This creates the `bird_observations` index. Safe to re-run — skips anything th
 python scripts/index_birds.py
 ```
 
-Filters the dataset to birds only (~74,300 images across 1,486 species), generates JINA-CLIP-V2 embeddings via EIS, and bulk-indexes everything into Elasticsearch. Progress is checkpointed to `data/indexed_ids.json` — you can interrupt with `Ctrl+C` and resume by re-running the same command.
+Filters the dataset to birds only (~74,300 images across 1,486 species), generates Jina Embeddings V5 Omni Small embeddings via EIS, and bulk-indexes everything into Elasticsearch. Progress is checkpointed to `data/indexed_ids.json` — you can interrupt with `Ctrl+C` and resume by re-running the same command.
 
 Expected time: **3–6 hours** depending on network speed and Jina API tier.
 
 ### 6. Run the app
 
 ```bash
-streamlit run app/main.py
+PYTHONPATH=. streamlit run app/main.py
 ```
 
 Opens at `http://localhost:8501`.

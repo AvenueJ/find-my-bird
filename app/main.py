@@ -7,7 +7,7 @@ from geopy.geocoders import Nominatim
 from PIL import Image
 from streamlit_folium import st_folium
 
-from app import search
+from app import config, search
 
 st.set_page_config(page_title="Bird Nerd", page_icon="🐦", layout="wide")
 st.title("Bird Nerd")
@@ -26,7 +26,7 @@ def _geocode(location_text: str) -> tuple[float | None, float | None]:
 
 def _load_thumbnail(path: str, max_size: int = 160) -> Image.Image | None:
     try:
-        img = Image.open(path)
+        img = Image.open(config.DATA_DIR / path)
         img.thumbnail((max_size, max_size))
         return img
     except Exception:
@@ -58,7 +58,7 @@ def _render_result_cards(results: list[dict]) -> None:
                         [
                             hit.get("order"),
                             hit.get("family"),
-                            hit.get("observed_on"),
+                            hit.get("inat_observed_on"),
                         ],
                     )
                 )
@@ -68,9 +68,9 @@ def _render_result_cards(results: list[dict]) -> None:
 
 def _render_map(observations: list[dict]) -> None:
     points = [
-        (o["location"]["lat"], o["location"]["lon"], o.get("species_common", ""), o.get("observed_on", ""))
+        (o["inat_location"]["lat"], o["inat_location"]["lon"], o.get("species_common", ""), o.get("inat_observed_on", ""))
         for o in observations
-        if o.get("location")
+        if o.get("inat_location")
     ]
     if not points:
         return
@@ -195,7 +195,7 @@ with tab_explore:
                                 f"  *({obs.get('species_scientific', '')})*"
                             )
                             meta = "  ·  ".join(
-                                filter(None, [obs.get("order"), obs.get("family"), obs.get("observed_on")])
+                                filter(None, [obs.get("order"), obs.get("family"), obs.get("inat_observed_on")])
                             )
                             if meta:
                                 st.caption(meta)

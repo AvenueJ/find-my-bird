@@ -16,6 +16,6 @@ EMBEDDING_DIMS: int = 1024
 KNN_NUM_CANDIDATES: int = 100
 KNN_TOP_K: int = 10
 BULK_BATCH_SIZE: int = 100
-EIS_ENDPOINT_ID: str = ".jina-clip-v2"
+EIS_ENDPOINT_ID: str = ".jina-embeddings-v5-omni-small"
 
 PROGRESS_FILE: Path = DATA_DIR / "indexed_ids.json"

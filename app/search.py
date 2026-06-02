@@ -1,5 +1,4 @@
 import base64
-import re
 from typing import Any
 
 from app import config
@@ -37,7 +36,7 @@ def _build_geo_month_filter(
             {
                 "geo_distance": {
                     "distance": f"{radius_km}km",
-                    "location": {"lat": lat, "lon": lon},
+                    "inat_location": {"lat": lat, "lon": lon},
                 }
             }
         )
@@ -106,23 +105,6 @@ def search_hybrid(
     return _format_hits(resp)
 
 
-def _parse_wkt_point(wkt: str) -> dict[str, float] | None:
-    m = re.match(r"POINT\s*\(([+-]?\d+\.?\d*)\s+([+-]?\d+\.?\d*)\)", wkt)
-    if m:
-        return {"lon": float(m.group(1)), "lat": float(m.group(2))}
-    return None
-
-
-def _esql_to_dicts(resp: Any) -> list[dict]:
-    columns = [c["name"] for c in resp.get("columns", [])]
-    rows = []
-    for values in resp.get("values", []):
-        row = dict(zip(columns, values))
-        if "location" in row and isinstance(row["location"], str):
-            row["location"] = _parse_wkt_point(row["location"])
-        rows.append(row)
-    return rows
-
 
 def search_esql(
     lat: float,
@@ -131,16 +113,19 @@ def search_esql(
     month: int | None = None,
     limit: int = 50,
 ) -> list[dict]:
-    month_filter = f"| WHERE month == {month}" if month else ""
-    query = f"""
-        FROM {config.INDEX_NAME}
-        | WHERE location IS NOT NULL
-        | WHERE ST_DISTANCE(location, ST_POINT({lon}, {lat})) <= {int(radius_km * 1000)}
-        {month_filter}
-        | KEEP species_common, species_scientific, family, order, image_path, observed_on, location
-        | SORT observed_on DESC
-        | LIMIT {limit}
-    """
+    must: list[dict] = [
+        {"exists": {"field": "inat_location"}},
+        {"geo_distance": {"distance": f"{radius_km}km", "inat_location": {"lat": lat, "lon": lon}}},
+    ]
+    if month:
+        must.append({"term": {"month": month}})
+
     es = get_client()
-    resp = es.esql.query(body={"query": query})
-    return _esql_to_dicts(resp)
+    resp = es.search(
+        index=config.INDEX_NAME,
+        query={"bool": {"must": must}},
+        sort=[{"inat_observed_on": {"order": "desc"}}],
+        source={"excludes": ["embedding"]},
+        size=limit,
+    )
+    return _format_hits(resp)

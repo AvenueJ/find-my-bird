@@ -2,7 +2,7 @@
 Create the Elasticsearch index for bird observations.
 Safe to run multiple times — skips if the index already exists.
 
-The .jina-clip-v2 inference endpoint is pre-deployed by Elastic and requires no setup.
+The .jina-embeddings-v5-omni-small inference endpoint is pre-deployed by Elastic and requires no setup.
 """
 
 import sys
@@ -22,8 +22,8 @@ INDEX_MAPPING = {
                 "index": True,
                 "similarity": "cosine",
             },
-            "location": {"type": "geo_point"},
-            "observed_on": {
+            "inat_location": {"type": "geo_point"},
+            "inat_observed_on": {
                 "type": "date",
                 "format": "yyyy-MM-dd||yyyy-MM-dd HH:mm:ss",
             },
@@ -34,9 +34,8 @@ INDEX_MAPPING = {
             "family": {"type": "keyword"},
             "genus": {"type": "keyword"},
             "image_path": {"type": "keyword", "index": False},
-            "category_id": {"type": "integer"},
-            "image_id": {"type": "integer"},
-            "rights_holder": {"type": "keyword"},
+            "inat_category_id": {"type": "integer"},
+            "inat_image_id": {"type": "integer"},
         }
     },
 }
@@ -46,13 +45,17 @@ def main() -> None:
     es = get_client()
     print(f"Connecting to {config.ELASTICSEARCH_URL} …")
     info = es.info()
-    print(f"[OK] Connected — cluster: {info['cluster_name']}, version: {info['version']['number']}")
+    print(
+        f"[OK] Connected — cluster: {info['cluster_name']}, version: {info['version']['number']}"
+    )
 
     if es.indices.exists(index=config.INDEX_NAME):
         print(f"[OK] Index '{config.INDEX_NAME}' already exists — skipping")
     else:
         es.indices.create(index=config.INDEX_NAME, body=INDEX_MAPPING)
-        print(f"[OK] Index '{config.INDEX_NAME}' created ({config.EMBEDDING_DIMS}-dim cosine vectors)")
+        print(
+            f"[OK] Index '{config.INDEX_NAME}' created ({config.EMBEDDING_DIMS}-dim cosine vectors)"
+        )
 
     print("\nSetup complete. You can now run: python scripts/index_birds.py")
 

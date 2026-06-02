@@ -1,5 +1,5 @@
 """
-Parse iNaturalist 2021 mini JSON, filter for birds (Aves), generate JINA-CLIP-V2
+Parse iNaturalist 2021 mini JSON, filter for birds (Aves), generate Jina Embeddings V5 Omni Small
 embeddings via Elastic Inference Service, and bulk-index into Elasticsearch.
 
 Resumable: already-indexed image IDs are tracked in data/indexed_ids.json.
@@ -94,18 +94,17 @@ def build_doc(img: dict, cat: dict, embedding: list[float]) -> dict:
         "order": cat.get("order", ""),
         "family": cat.get("family", ""),
         "genus": cat.get("genus", ""),
-        "image_path": str(IMAGE_ROOT / cat["image_dir_name"] / Path(img["file_name"]).name),
-        "category_id": cat["id"],
-        "image_id": img["id"],
-        "rights_holder": img.get("rights_holder", ""),
-        "observed_on": date_str or None,
+        "image_path": f"{cat['image_dir_name']}/{Path(img['file_name']).name}",
+        "inat_category_id": cat["id"],
+        "inat_image_id": img["id"],
+        "inat_observed_on": date_str or None,
         "month": month,
     }
 
     lat = img.get("latitude")
     lon = img.get("longitude")
     if lat is not None and lon is not None:
-        doc["location"] = {"lat": lat, "lon": lon}
+        doc["inat_location"] = {"lat": lat, "lon": lon}
 
     return doc
 
@@ -114,8 +113,8 @@ def generate_actions(batch: list[dict]):
     for doc in batch:
         yield {
             "_index": config.INDEX_NAME,
-            "_id": doc["image_id"],
-            "_source": {k: v for k, v in doc.items() if k != "image_id"},
+            "_id": doc["inat_image_id"],
+            "_source": {k: v for k, v in doc.items() if k != "inat_image_id"},
         }
 
 
@@ -128,7 +127,7 @@ def flush_batch(es, batch: list[dict], indexed_ids: set[int]) -> int:
         successes = len(batch) - len(errors)
 
     for doc in batch:
-        indexed_ids.add(doc["image_id"])
+        indexed_ids.add(doc["inat_image_id"])
     save_checkpoint(indexed_ids)
     return successes
 
