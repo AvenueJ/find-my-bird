@@ -14,7 +14,7 @@ def _embed_image(image_bytes: bytes) -> list[float] | None:
         resp = es.inference.inference(
             task_type="embedding",
             inference_id=config.EIS_ENDPOINT_ID,
-            body={"input": b64},
+            body={"input": [config.build_image_input(b64)]},
         )
         results = resp.get("embeddings") or []
         if results:

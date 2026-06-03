@@ -36,7 +36,7 @@ Edit `.env` and fill in:
 | `ELASTICSEARCH_URL` | Your Elastic Cloud endpoint, e.g. `https://my-deployment.es.io:443` |
 | `ELASTICSEARCH_API_KEY` | API key from Kibana → Stack Management → API Keys |
 | `INDEX_NAME` | Elasticsearch index name (default: `bird_observations`) |
-| `DATA_DIR` | Absolute path to the `data/` directory in this repo |
+| `DATA_DIR` | Absolute path to the directory that **directly contains** the species image folders (see step 3) |
 
 ### 3. Download the dataset
 
@@ -52,15 +52,25 @@ tar -xzf train_mini.tar.gz
 
 This produces:
 - `data/train_mini.json` — annotations with species, geo, and date info
-- `data/train_mini/` — ~500k images organized by species directory
+- `data/train_mini/` — ~500k images organized into one folder per species
 
-### 4. Create the Elasticsearch index and inference endpoint
+The indexer resolves each image as `DATA_DIR/<species_folder>/<file>`, so the species
+folders must sit **directly** under `DATA_DIR`. Either point `DATA_DIR` at the
+`train_mini` directory, or move the species folders up into `data/`:
+
+```bash
+mv data/train_mini/* data/
+```
+
+### 4. Create the Elasticsearch index
 
 ```bash
 python scripts/setup_es.py
 ```
 
-This creates the `bird_observations` index. Safe to re-run — skips anything that already exists.
+This creates the `bird_observations` index. The `.jina-embeddings-v5-omni-small`
+inference endpoint is pre-deployed by Elastic, so there's nothing to create for it.
+Safe to re-run — skips the index if it already exists.
 
 ### 5. Index the dataset
 
@@ -68,9 +78,9 @@ This creates the `bird_observations` index. Safe to re-run — skips anything th
 python scripts/index_birds.py
 ```
 
-Filters the dataset to birds only (~74,300 images across 1,486 species), generates Jina Embeddings V5 Omni Small embeddings via EIS, and bulk-indexes everything into Elasticsearch. Progress is checkpointed to `data/indexed_ids.json` — you can interrupt with `Ctrl+C` and resume by re-running the same command.
+Filters the dataset to birds only (~74,300 images across 1,486 species), generates Jina Embeddings V5 Omni Small embeddings via EIS, and bulk-indexes everything into Elasticsearch. Progress is checkpointed to `indexed_ids.json` in the repo root (one file per `INDEX_NAME`) — you can interrupt with `Ctrl+C` and resume by re-running the same command.
 
-Expected time: **3–6 hours** depending on network speed and Jina API tier.
+Expected time: **3–6 hours** depending on network speed and EIS throughput.
 
 ### 6. Run the app
 
@@ -90,9 +100,10 @@ bird-nerd/
 │   ├── search.py       # vector, hybrid, and ES|QL search functions
 │   └── main.py         # Streamlit UI
 ├── scripts/
-│   ├── setup_es.py     # create EIS endpoint + ES index
+│   ├── setup_es.py     # create the ES index
 │   └── index_birds.py  # parse dataset, embed images, bulk index
 ├── data/               # dataset lives here (gitignored)
+├── indexed_ids.json    # indexing checkpoint, repo root (gitignored)
 ├── .env.example
 ├── requirements.txt
 └── README.md

@@ -11,7 +11,6 @@ import base64
 import json
 import logging
 import sys
-import time
 from pathlib import Path
 
 from elasticsearch.helpers import bulk, BulkIndexError
@@ -28,7 +27,6 @@ log = logging.getLogger(__name__)
 
 ANNOTATION_JSON = config.DATA_DIR / "train_mini.json"
 IMAGE_ROOT = config.DATA_DIR
-SLEEP_BETWEEN_CALLS = 0.15  # ~400 RPM, safely under Jina's 500 RPM limit
 
 
 def load_bird_images(annotation_path: Path) -> list[dict]:
@@ -64,18 +62,22 @@ def save_checkpoint(indexed_ids: set[int]) -> None:
     config.PROGRESS_FILE.write_text(json.dumps(list(indexed_ids)))
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
-def embed_image(es, image_bytes: bytes) -> list[float]:
-    b64 = base64.b64encode(image_bytes).decode()
+def _call_eis(es, inputs: list[dict]) -> list[list[float]]:
     resp = es.inference.inference(
         task_type="embedding",
         inference_id=config.EIS_ENDPOINT_ID,
-        body={"input": b64},
+        body={"input": inputs},
     )
     results = resp.get("embeddings") or []
-    if not results:
-        raise ValueError("Empty embedding response from EIS")
-    return results[0]["embedding"]
+    if len(results) != len(inputs):
+        raise ValueError(f"Expected {len(inputs)} embeddings, got {len(results)}")
+    return [r["embedding"] for r in results]
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
+def embed_batch(es, images_bytes: list[bytes]) -> list[list[float]]:
+    inputs = [config.build_image_input(base64.b64encode(b).decode()) for b in images_bytes]
+    return _call_eis(es, inputs)
 
 
 def build_doc(img: dict, cat: dict, embedding: list[float]) -> dict:
@@ -153,8 +155,28 @@ def main() -> None:
         return
 
     es = get_client()
-    batch: list[dict] = []
+
+    eis_batch_size = config.EIS_MAX_BATCH_SIZE
+
+    pending: list[tuple[dict, dict, bytes]] = []
+    es_batch: list[dict] = []
     total_indexed = 0
+
+    def flush_pending() -> None:
+        nonlocal total_indexed
+        if not pending:
+            return
+        try:
+            embeddings = embed_batch(es, [b for _, _, b in pending])
+        except Exception as exc:
+            log.warning("Embedding failed for batch of %d images: %s", len(pending), exc)
+            return
+        for (img, cat, _), embedding in zip(pending, embeddings):
+            es_batch.append(build_doc(img, cat, embedding))
+        if len(es_batch) >= config.BULK_BATCH_SIZE:
+            n = flush_batch(es, es_batch, indexed_ids)
+            total_indexed += n
+            es_batch.clear()
 
     with tqdm(total=len(remaining), unit="img") as pbar:
         for entry in remaining:
@@ -171,24 +193,18 @@ def main() -> None:
                 pbar.update(1)
                 continue
 
-            try:
-                embedding = embed_image(es, image_bytes)
-            except Exception as exc:
-                log.warning("Embedding failed for image %d: %s", img["id"], exc)
-                pbar.update(1)
-                continue
-
-            batch.append(build_doc(img, cat, embedding))
+            pending.append((img, cat, image_bytes))
             pbar.update(1)
-            time.sleep(SLEEP_BETWEEN_CALLS)
 
-            if len(batch) >= config.BULK_BATCH_SIZE:
-                n = flush_batch(es, batch, indexed_ids)
-                total_indexed += n
-                batch = []
+            if len(pending) >= eis_batch_size:
+                flush_pending()
+                pending.clear()
 
-    if batch:
-        n = flush_batch(es, batch, indexed_ids)
+    flush_pending()
+    pending.clear()
+
+    if es_batch:
+        n = flush_batch(es, es_batch, indexed_ids)
         total_indexed += n
 
     log.info("Done. Indexed %d documents total.", total_indexed)
